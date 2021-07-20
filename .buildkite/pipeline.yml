@@ -1,7 +1,7 @@
 # Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 steps:
-  - label: "build-gnu-x86"
+  - label: build-gnu-x86
     commands:
      - cargo build --release
     retry:
@@ -11,10 +11,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "build-gnu-arm"
+  - label: build-gnu-arm
     commands:
      - cargo build --release
     retry:
@@ -24,10 +24,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "build-musl-x86"
+  - label: build-musl-x86
     commands:
      - cargo build --release --target x86_64-unknown-linux-musl
     retry:
@@ -37,10 +37,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "build-musl-arm"
+  - label: build-musl-arm
     commands:
      - cargo build --release --target aarch64-unknown-linux-musl
     retry:
@@ -50,10 +50,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "style"
+  - label: style
     command: cargo fmt --all -- --check
     retry:
       automatic: false
@@ -62,10 +62,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "unittests-gnu-x86"
+  - label: unittests-gnu-x86
     commands:
      - cargo test --all-features --workspace
     retry:
@@ -76,12 +76,12 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "unittests-gnu-arm"
+  - label: unittests-gnu-arm
     commands:
      - cargo test --all-features --workspace
     retry:
@@ -92,12 +92,12 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "unittests-musl-x86"
+  - label: unittests-musl-x86
     command:
      - cargo test --all-features --workspace --target x86_64-unknown-linux-musl
     retry:
@@ -108,12 +108,12 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "unittests-musl-arm"
+  - label: unittests-musl-arm
     command:
      - cargo test --all-features --workspace --target aarch64-unknown-linux-musl
     retry:
@@ -124,12 +124,12 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "clippy-x86"
+  - label: clippy-x86
     commands:
      - cargo clippy --workspace --bins --examples --benches --all-features -- -D warnings
     retry:
@@ -139,10 +139,10 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "check-warnings-x86"
+  - label: check-warnings-x86
     commands:
       - RUSTFLAGS="-D warnings" cargo check --all-targets --all-features --workspace
     retry:
@@ -153,10 +153,10 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "check-warnings-arm"
+  - label: check-warnings-arm
     command:
      - RUSTFLAGS="-D warnings" cargo check --all-targets --all-features --workspace
     retry:
@@ -167,10 +167,10 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
 
-  - label: "coverage-x86"
+  - label: coverage-x86
     commands:
       - pytest rust-vmm-ci/integration_tests/test_coverage.py
     retry:
@@ -181,15 +181,15 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "coverage-arm"
+  - label: coverage-arm
     commands:
       - pytest rust-vmm-ci/integration_tests/test_coverage.py
-    skip: "Currently this test is very unreliable. Kcov on aarch64 needs fixing."
+    skip: Currently this test is very unreliable. Kcov on aarch64 needs fixing.
     retry:
       automatic: false
     agents:
@@ -198,12 +198,12 @@ steps:
     plugins:
       - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           volumes:
-            - "/tmp:/tmp"
+            - /tmp:/tmp
 
-  - label: "commit-format"
+  - label: commit-format
     commands:
       - pytest rust-vmm-ci/integration_tests/test_commit_format.py
     if: build.env("BUILDKITE_REPO") !~ /^git@/
@@ -213,11 +213,11 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           propagate-environment: true
 
-  - label: "cargo-audit"
+  - label: cargo-audit
     commands:
       - cargo audit -q
     retry:
@@ -226,6 +226,6 @@ steps:
       os: linux
     plugins:
       - docker#v3.8.0:
-          image: "rustvmm/dev:v12"
+          image: rustvmm/dev:v12
           always-pull: true
           propagate-environment: true
