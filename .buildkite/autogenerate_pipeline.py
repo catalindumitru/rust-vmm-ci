@@ -59,7 +59,7 @@ class BuildkiteStep:
     and `DOCKER_PLUGIN_CONFIG`. The output is a dictionary.
     """
 
-    def __init__(self, test_name, command, platform):
+    def __init__(self):
         """
         Initialize a Buildkite step with values provided as arguments for the
         mandatory keys `test_name`, `command` and `platform` and default values
@@ -78,7 +78,18 @@ class BuildkiteStep:
             }
         ]
 
-        # Mandatory values
+    def _add_docker_config(self, cfg):
+        if cfg:
+            target = self.plugins[0][f"docker#{DOCKER_PLUGIN_VERSION}"]
+            for key, val in cfg.items():
+                target[key] = val
+
+    def build(self, input):
+        # Mandatory keys.
+        test_name = input.get('test_name')
+        command = input.get('command')
+        platform = input.get('platform')
+
         assert test_name, "Step is missing test name."
         self.label = f"{test_name}-{platform}"
 
@@ -92,52 +103,17 @@ class BuildkiteStep:
             platform = 'arm'
         self.agents['platform'] = f"{platform}.metal"
 
-    def _set_key_val(self, target, cfg):
-        """ Add the key-value pairs of the dictionary cfg to target. """
+        # Optional keys.
+        docker_cfg = input.get('docker_plugin')
+        self._add_docker_config(docker_cfg)
 
-        for key, val in cfg.items():
-            target[key] = val
-
-    def override_agent_tags(self, test_name):
-        """ Override the tags by which the linux agent is selected. """
-
-        env_cfg = None
-        platform = self.agents.get('platform')
-
-        if platform == 'x86_64.metal' and X86_AGENT_TAGS:
-            env_cfg = X86_AGENT_TAGS
-        if platform == 'arm.metal' and AARCH64_AGENT_TAGS:
-            env_cfg = AARCH64_AGENT_TAGS
-        if env_cfg:
-            env_cfg = json.loads(env_cfg)
-            if test_name in env_cfg['tests']:
-                target = self.agents
-                target.clear()
-                cfg = env_cfg['cfg']
-                self._set_key_val(target, cfg)
-
-    def add_docker_config(self, test_name, input_cfg):
-        """ Specifies additional configuration for the docker plugin. """
-
-        # self.plugins is a list. We want to change the first plugin,
-        # more precisely the value of the key
-        # f"docker#{DOCKER_PLUGIN_VERSION}", which is a dictionary.
-        target = self.plugins[0][f"docker#{DOCKER_PLUGIN_VERSION}"]
-        if input_cfg:
-            self._set_key_val(target, input_cfg)
-
-        if DOCKER_PLUGIN_CONFIG:
-            env_cfg = json.loads(DOCKER_PLUGIN_CONFIG)
-            if test_name in env_cfg['tests']:
-                cfg = env_cfg['cfg']
-                self._set_key_val(target, cfg)
-
-    def build_json(self):
         # This is purely for readability. It guarantees that the keys
         # will appear in this order in the step.
         ordered_keys = ['label', 'command', 'retry', 'agents', 'plugins']
         for key in ordered_keys:
-            self.__dict__[key] = self.__dict__.pop(key)
+            if key in self.__dict__:
+                self.__dict__[key] = self.__dict__.pop(key)
+
         return self.__dict__
 
 
@@ -148,42 +124,76 @@ class BuildkiteConfig:
     be put into yaml format by the pyyaml package.
     """
 
-    _instance = None
+    __instance = None
 
-    def __new__(cls, json_input):
-        if cls._instance is None:
-            cls._instance = object.__new__(cls)
-            cls._input = json_input
-            cls._output = {'steps': []}
-            cls._is_built = False
+    def __new__(cls):
+        if cls.__instance is None:
+            cls.__instance = object.__new__(cls)
+            cls.__instance.steps = []
 
-        return cls._instance
+        return cls.__instance
 
-    def build(self):
-        if not self._is_built:
-            tests = self._input.get('tests')
-            assert tests, "Input is missing list of tests."
+    def _env_override_agent_tags(self, test_index):
+        """ Override the tags by which the linux agent is selected. """
 
-            for test in tests:
-                platforms = test.get('platform')
-                assert len(platforms), "Input is missing platforms."
+        for env_var, platform in [
+            (X86_AGENT_TAGS, 'x86_64.metal'),
+            (AARCH64_AGENT_TAGS, 'arm.metal')
+        ]:
+            if env_var:
+                env_cfg = json.loads(env_var)
+                for test_name in env_cfg['tests']:
+                    step_index = test_index[test_name]
+                    step = self.steps[step_index]
+                    assert step['agents']['platform'] == platform,\
+                        "Wrong environment variable config."
+                    target = step['agents']
+                    target.clear()
+                    cfg = env_cfg['cfg']
+                    for key, val in cfg.items():
+                        target[key] = val
 
-                for platform in platforms:
-                    test_name = test.get('test_name')
-                    command = test.get('command')
-                    docker_cfg = test.get('docker_plugin')
+    def _env_add_docker_config(self, test_index):
+        """ Specifies additional configuration for the docker plugin. """
 
-                    step = BuildkiteStep(test_name, command, platform)
-                    step.override_agent_tags(test_name)
-                    step.add_docker_config(test_name, docker_cfg)
+        if DOCKER_PLUGIN_CONFIG:
+            env_cfg = json.loads(DOCKER_PLUGIN_CONFIG)
+            for test_name in env_cfg['tests']:
+                step_index = test_index[test_name]
+                step = self.steps[step_index]
+                target = step['plugins'][0][f"docker#{DOCKER_PLUGIN_VERSION}"]
+                cfg = env_cfg['cfg']
+                for key, val in cfg.items():
+                    target[key] = val
 
-                    step_output = step.build_json()
-                    self._output['steps'].append(step_output)
+    def build(self, input):
+        tests = input.get('tests')
+        assert tests, "Input is missing list of tests."
 
-            self._is_built = True
+        # Dictionary for retrieving a step from its test_name.
+        test_index = {}
+        idx = 0
 
-    def get_output(self):
-        return self._output
+        for test in tests:
+            platforms = test.get('platform')
+            assert len(platforms), "Input is missing platforms."
+
+            platforms = [platform for platform in platforms]
+
+            for platform in platforms:
+                test['platform'] = platform
+
+                step = BuildkiteStep()
+                step_output = step.build(test)
+                self.steps.append(step_output)
+
+                test_index[test['test_name']] = idx
+                idx += 1
+
+        self._env_override_agent_tags(test_index)
+        self._env_add_docker_config(test_index)
+
+        return self.__dict__
 
 
 def generate_pipeline(config_file=f"{PARENT_DIR}/test_description.json"):
@@ -191,9 +201,8 @@ def generate_pipeline(config_file=f"{PARENT_DIR}/test_description.json"):
         json_cfg = json.load(json_file)
         json_file.close()
 
-    config = BuildkiteConfig(json_cfg)
-    config.build()
-    output = config.get_output()
+    config = BuildkiteConfig()
+    output = config.build(json_cfg)
     yaml.dump(output, sys.stdout, sort_keys=False)
 
 
