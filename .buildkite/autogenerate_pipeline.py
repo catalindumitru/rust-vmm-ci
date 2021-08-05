@@ -66,12 +66,10 @@ class BuildkiteStep:
         for the other keys.
         """
 
-        self._output = {}
-
         # Default values
-        self._output['retry'] = {'automatic': False}
-        self._output['agents'] = {'os': 'linux'}
-        self._output['plugins'] = [
+        self.retry = {'automatic': False}
+        self.agents = {'os': 'linux'}
+        self.plugins = [
             {
                 f"docker#{DOCKER_PLUGIN_VERSION}": {
                     'image': f"rustvmm/dev:{CONTAINER_VERSION}",
@@ -82,23 +80,17 @@ class BuildkiteStep:
 
         # Mandatory values
         assert test_name, "Step is missing test name."
-        self._output['label'] = f"{test_name}-{platform}"
+        self.label = f"{test_name}-{platform}"
 
         assert command, "Step is missing command."
-        self._output['command'] = command.replace(
+        self.command = command.replace(
             "{target_platform}", platform
         )
 
         assert platform, "Step is missing platform."
         if platform == 'aarch64':
             platform = 'arm'
-        self._output['agents']['platform'] = f"{platform}.metal"
-
-        # This is purely for readability. It guarantees that these keys
-        # will appear first and in this order in the step.
-        ordered_keys = ['label', 'command', 'retry', 'agents', 'plugins']
-        for key in ordered_keys:
-            self._output[key] = self._output.pop(key)
+        self.agents['platform'] = f"{platform}.metal"
 
     def _set_key_val(self, target, cfg):
         """ Add the key-value pairs of the dictionary cfg to target. """
@@ -110,7 +102,7 @@ class BuildkiteStep:
         """ Override the tags by which the linux agent is selected. """
 
         env_cfg = None
-        platform = self._output['agents'].get('platform')
+        platform = self.agents.get('platform')
 
         if platform == 'x86_64.metal' and X86_AGENT_TAGS:
             env_cfg = X86_AGENT_TAGS
@@ -119,7 +111,7 @@ class BuildkiteStep:
         if env_cfg:
             env_cfg = json.loads(env_cfg)
             if test_name in env_cfg['tests']:
-                target = self._output['agents']
+                target = self.agents
                 target.clear()
                 cfg = env_cfg['cfg']
                 self._set_key_val(target, cfg)
@@ -127,10 +119,10 @@ class BuildkiteStep:
     def add_docker_config(self, test_name, input_cfg):
         """ Specifies additional configuration for the docker plugin. """
 
-        # self._output['plugins'] is a list. We want to change the first
-        # plugin, more precisely the value of the key
+        # self.plugins is a list. We want to change the first plugin,
+        # more precisely the value of the key
         # f"docker#{DOCKER_PLUGIN_VERSION}", which is a dictionary.
-        target = self._output['plugins'][0][f"docker#{DOCKER_PLUGIN_VERSION}"]
+        target = self.plugins[0][f"docker#{DOCKER_PLUGIN_VERSION}"]
         if input_cfg:
             self._set_key_val(target, input_cfg)
 
@@ -140,8 +132,13 @@ class BuildkiteStep:
                 cfg = env_cfg['cfg']
                 self._set_key_val(target, cfg)
 
-    def get_output(self):
-        return self._output
+    def build_json(self):
+        # This is purely for readability. It guarantees that the keys
+        # will appear in this order in the step.
+        ordered_keys = ['label', 'command', 'retry', 'agents', 'plugins']
+        for key in ordered_keys:
+            self.__dict__[key] = self.__dict__.pop(key)
+        return self.__dict__
 
 
 class BuildkiteConfig:
@@ -180,7 +177,7 @@ class BuildkiteConfig:
                     step.override_agent_tags(test_name)
                     step.add_docker_config(test_name, docker_cfg)
 
-                    step_output = step.get_output()
+                    step_output = step.build_json()
                     self._output['steps'].append(step_output)
 
             self._is_built = True
