@@ -61,9 +61,8 @@ class BuildkiteStep:
 
     def __init__(self):
         """
-        Initialize a Buildkite step with values provided as arguments for the
-        mandatory keys `test_name`, `command` and `platform` and default values
-        for the other keys.
+        Initialize a Buildkite step with default values for the keys that
+        appear in all steps and are not given as input in the json file.
         """
 
         # Default values
@@ -79,10 +78,40 @@ class BuildkiteStep:
         ]
 
     def _add_docker_config(self, cfg):
+        """ Add configuration for docker from the json input. """
         if cfg:
             target = self.plugins[0][f"docker#{DOCKER_PLUGIN_VERSION}"]
             for key, val in cfg.items():
                 target[key] = val
+
+    def _env_change_config(self, test_name, env_var, target, override=False):
+        if env_var:
+            env_cfg = json.loads(env_var)
+            if test_name in env_cfg['tests']:
+                if override:
+                    target.clear()
+                cfg = env_cfg['cfg']
+                for key, val in cfg.items():
+                    target[key] = val
+
+    def _env_override_agent_tags(self, test_name):
+        """ Override the tags by which the linux agent is selected. """
+
+        env_var = None
+        platform = self.agents['platform']
+
+        if platform == 'x86_64.metal' and X86_AGENT_TAGS:
+            env_var = X86_AGENT_TAGS
+        if platform == 'arm.metal' and AARCH64_AGENT_TAGS:
+            env_var = AARCH64_AGENT_TAGS
+
+        self._env_change_config(test_name, env_var, self.agents, True)
+
+    def _env_add_docker_config(self, test_name):
+        """ Specify additional configuration for the docker plugin. """
+
+        target = self.plugins[0][f"docker#{DOCKER_PLUGIN_VERSION}"]
+        self._env_change_config(test_name, DOCKER_PLUGIN_CONFIG, target)
 
     def build(self, input):
         # Mandatory keys.
@@ -106,6 +135,10 @@ class BuildkiteStep:
         # Optional keys.
         docker_cfg = input.get('docker_plugin')
         self._add_docker_config(docker_cfg)
+
+        # Override/add configuration from environment variables.
+        self._env_override_agent_tags(test_name)
+        self._env_add_docker_config(test_name)
 
         # This is purely for readability. It guarantees that the keys
         # will appear in this order in the step.
@@ -133,46 +166,9 @@ class BuildkiteConfig:
 
         return cls.__instance
 
-    def _env_override_agent_tags(self, test_index):
-        """ Override the tags by which the linux agent is selected. """
-
-        for env_var, platform in [
-            (X86_AGENT_TAGS, 'x86_64.metal'),
-            (AARCH64_AGENT_TAGS, 'arm.metal')
-        ]:
-            if env_var:
-                env_cfg = json.loads(env_var)
-                for test_name in env_cfg['tests']:
-                    step_index = test_index[test_name]
-                    step = self.steps[step_index]
-                    assert step['agents']['platform'] == platform,\
-                        "Wrong environment variable config."
-                    target = step['agents']
-                    target.clear()
-                    cfg = env_cfg['cfg']
-                    for key, val in cfg.items():
-                        target[key] = val
-
-    def _env_add_docker_config(self, test_index):
-        """ Specifies additional configuration for the docker plugin. """
-
-        if DOCKER_PLUGIN_CONFIG:
-            env_cfg = json.loads(DOCKER_PLUGIN_CONFIG)
-            for test_name in env_cfg['tests']:
-                step_index = test_index[test_name]
-                step = self.steps[step_index]
-                target = step['plugins'][0][f"docker#{DOCKER_PLUGIN_VERSION}"]
-                cfg = env_cfg['cfg']
-                for key, val in cfg.items():
-                    target[key] = val
-
     def build(self, input):
         tests = input.get('tests')
         assert tests, "Input is missing list of tests."
-
-        # Dictionary for retrieving a step from its test_name.
-        test_index = {}
-        idx = 0
 
         for test in tests:
             platforms = test.get('platform')
@@ -186,12 +182,6 @@ class BuildkiteConfig:
                 step = BuildkiteStep()
                 step_output = step.build(test)
                 self.steps.append(step_output)
-
-                test_index[test['test_name']] = idx
-                idx += 1
-
-        self._env_override_agent_tags(test_index)
-        self._env_add_docker_config(test_index)
 
         return self.__dict__
 
